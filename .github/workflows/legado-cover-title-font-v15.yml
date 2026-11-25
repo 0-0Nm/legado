@@ -28,11 +28,26 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Bound Gradle and Kotlin daemon memory for this feature CI job
+        # The previous feature run died with a Kotlin daemon OOM in
+        # :app:compileAppDebugKotlin on the default heap. These limits live
+        # only in this workflow's runner-local gradle.properties, not in the
+        # project: ubuntu-latest gives 4 vCPU / 16 GB (7 GB on smaller
+        # runners), so Gradle 3g + Kotlin daemon 4g + 2 workers stays safe.
+        run: |
+          mkdir -p "$HOME/.gradle"
+          cat > "$HOME/.gradle/gradle.properties" <<'EOF'
+          org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m
+          org.gradle.workers.max=2
+          kotlin.daemon.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m
+          EOF
+          cat "$HOME/.gradle/gradle.properties"
+
       - name: Run AppDebug unit tests and assemble the arm64 APK
         # Omitting RELEASE_STORE_FILE leaves AppDebug on Android's default debug signing config.
-        run: ./gradlew :app:testAppDebugUnitTest :app:assembleAppDebug -Pabi=arm64-v8a --stacktrace
+        run: ./gradlew :app:testAppDebugUnitTest :app:assembleAppDebug -Pabi=arm64-v8a --max-workers=2 --no-daemon --stacktrace
 
-      - name: Verify the debug APK and record its SHA-256
+      - name: Verify the debug APK applicationId, signing and record its SHA-256
         id: apk
         run: |
           shopt -s nullglob
@@ -41,6 +56,19 @@ jobs:
             echo '::error::Expected exactly one nonempty AppDebug APK'
             exit 1
           fi
+
+          aapt2=$(find "${ANDROID_HOME:?}/build-tools" -mindepth 2 -maxdepth 2 -name aapt2 -type f | sort -V | tail -n 1)
+          if [[ ! -x "$aapt2" ]]; then
+            echo '::error::Android SDK aapt2 not found'
+            exit 1
+          fi
+          expected_package='io.legado.app.archivecoverfont'
+          if ! "$aapt2" dump badging "${apks[0]}" | head -n 1 | grep -Eq "^package: name='${expected_package//./\\.}'( |$)"; then
+            echo '::error::AppDebug APK applicationId mismatch'
+            "$aapt2" dump badging "${apks[0]}" | head -n 1
+            exit 1
+          fi
+          "$aapt2" dump badging "${apks[0]}" | head -n 1
 
           apksigner=$(find "${ANDROID_HOME:?}/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)
           if [[ ! -x "$apksigner" ]]; then
