@@ -139,7 +139,7 @@ fun BookshelfGridItem(
 ) {
     val context = LocalContext.current
     val themeSignature = rememberThemeUiPalette().signature
-    val showBookName = AppConfig.showBookname
+    val settings = bookshelfTitleSettings
     val titleFontFamily = remember(context, themeSignature) {
         FontFamily(context.titleTypeface())
     }
@@ -172,7 +172,7 @@ fun BookshelfGridItem(
             if (item is BookshelfBookItemUi) {
                 BookshelfStatusBadge(item)
             }
-            if (showBookName == 2) {
+            if (settings.mode == 2) {
                 Text(
                     text = item.displayName,
                     modifier = Modifier
@@ -188,15 +188,17 @@ fun BookshelfGridItem(
                 )
             }
         }
-        if (showBookName == 0) {
+        if (settings.mode == 0) {
+            val paint = rememberBookshelfTitlePaint(settings.belowCover(item is BookshelfBookItemUi))
+            val customFace = paint?.typeface
             Text(
                 text = item.displayName,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 6.dp),
-                color = titleColor,
+                color = paint?.color?.let { Color(it) } ?: titleColor,
                 fontSize = 12.sp,
-                fontFamily = titleFontFamily,
+                fontFamily = if (customFace == null) titleFontFamily else remember(customFace) { FontFamily(customFace) },
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 2,

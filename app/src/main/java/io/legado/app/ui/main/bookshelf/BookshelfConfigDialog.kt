@@ -201,23 +201,28 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
 
     override fun onDialogDismissed(dialogId: Int) = Unit
 
-    private fun pickTitleColor() {
-        ColorPreference.ColorPickerDialogCompat.newBuilder()
+    internal fun restoreTitleTheme() {
+        values = values.copy(coverTitleColor = null)
+    }
+
+    internal fun pickTitleColor() {
+        val manager = childFragmentManager // The attached layout dialog owns the picker.
+        if (manager.isStateSaved || manager.findFragmentByTag(TITLE_COLOR_TAG) != null) return
+        val picker = ColorPreference.ColorPickerDialogCompat.newBuilder()
             .setColor(values.coverTitleColor ?: requireContext().titleTextColor)
             .setShowAlphaSlider(true)
-            .create().apply {
-                setColorPickerDialogListener(this@BookshelfConfigDialog)
-                show(childFragmentManager, "coverTitleColor")
-            }
+            .create()
+        picker.setColorPickerDialogListener(this)
+        picker.show(manager, TITLE_COLOR_TAG)
     }
 
     override fun onStart() {
         super.onStart()
-        (childFragmentManager.findFragmentByTag("coverTitleColor") as? ColorPickerDialog)
+        (childFragmentManager.findFragmentByTag(TITLE_COLOR_TAG) as? ColorPickerDialog)
             ?.setColorPickerDialogListener(this)
     }
 
-    private fun applyDraft() {
+    internal fun applyDraft() {
         if (importing || applied) return
         val commit = onApply ?: return dismissAllowingStateLoss()
         val draft = values
@@ -306,7 +311,7 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
                                         values = values.copy(coverTitleFont = "")
                                     },
                                     onColor = { closePopup(); pickTitleColor() },
-                                    onTheme = { values = values.copy(coverTitleColor = null) }
+                                    onTheme = ::restoreTitleTheme
                                 )
                             },
                             onValuesChange = { nextValues ->
@@ -398,6 +403,8 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
     }
 
     companion object {
+        private const val TITLE_COLOR_TAG = "coverTitleColor"
+
         fun create(
             initialValues: BookshelfConfigValues,
             onPreviewMarginChange: ((Int) -> Unit)? = null,

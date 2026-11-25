@@ -26,16 +26,34 @@ import io.legado.app.ui.widget.image.CoverImageView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private data class TitleSettings(val font: String, val color: Int?)
+internal data class BookshelfTitleSettings(val mode: Int, val font: String, val color: Int?) {
+    fun belowCover(isBook: Boolean) = takeIf { isBook && mode == 0 }
+    fun onCover(eligible: Boolean) = takeIf { eligible && mode == 2 }
+}
 
-private fun readTitleSettings() = if (AppConfig.showBookname == 2) {
-    TitleSettings(AppConfig.bookshelfCoverTitleFont, AppConfig.bookshelfCoverTitleColor)
-} else null
+private fun readTitleSettings() = BookshelfTitleSettings(
+    AppConfig.showBookname, AppConfig.bookshelfCoverTitleFont, AppConfig.bookshelfCoverTitleColor
+)
 
-// A normal preference read alone cannot invalidate a skipped grid item in Compose.
-private var titleSettings by mutableStateOf(readTitleSettings())
+// Both placements observe the same snapshot, published after the main dialog's Apply.
+internal var bookshelfTitleSettings by mutableStateOf(readTitleSettings())
+    private set
+
 internal fun refreshBookshelfCoverTitle() {
-    titleSettings = readTitleSettings()
+    bookshelfTitleSettings = readTitleSettings()
+}
+
+@Composable
+internal fun rememberBookshelfTitlePaint(settings: BookshelfTitleSettings?): CoverTitlePaint? {
+    if (settings == null || (settings.font.isEmpty() && settings.color == null)) return null
+    val ref = settings.font
+    val context = LocalContext.current.applicationContext
+    val face = if (ref.isEmpty()) null else key(ref) {
+        produceState<Typeface?>(null, ref) {
+            value = withContext(Dispatchers.IO) { BookshelfTitleFonts.resolve(context, ref) }
+        }.value
+    }
+    return CoverTitlePaint(face, settings.color)
 }
 
 @Composable
@@ -50,17 +68,11 @@ fun BookshelfComposeCover(
     val coverRequest = remember(item.coverIdentityKey()) {
         item.toCoverRequest()
     }
-    val settings = if (item is BookshelfBookItemUi && style == CoverImageView.CoverStyle.GRID &&
-        coverRequest.allowNameOverlay == true
-    ) titleSettings else null
-    val ref = settings?.font.orEmpty()
-    val context = LocalContext.current.applicationContext
-    val face = if (ref.isEmpty()) null else key(ref) {
-        produceState<Typeface?>(null, ref) {
-            value = withContext(Dispatchers.IO) { BookshelfTitleFonts.resolve(context, ref) }
-        }.value
-    }
-    CompositionLocalProvider(LocalCoverTitlePaint provides settings?.let { CoverTitlePaint(face, it.color) }) {
+    val settings = bookshelfTitleSettings.onCover(
+        item is BookshelfBookItemUi && style == CoverImageView.CoverStyle.GRID &&
+            coverRequest.allowNameOverlay == true
+    )
+    CompositionLocalProvider(LocalCoverTitlePaint provides rememberBookshelfTitlePaint(settings)) {
         BookCoverImage(
             path = coverRequest.path,
             name = coverRequest.name,
