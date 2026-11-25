@@ -22,11 +22,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Temurin JDK 17
+      - name: Set up Temurin JDKs (21 for UI tests, 17 for the build)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            21
+            17
 
       - name: Bound Gradle and Kotlin daemon memory for this feature CI job
         # The previous feature run died with a Kotlin daemon OOM in
@@ -45,7 +47,24 @@ jobs:
 
       - name: Run AppDebug unit tests and assemble the arm64 APK
         # Omitting RELEASE_STORE_FILE leaves AppDebug on Android's default debug signing config.
-        run: ./gradlew :app:testAppDebugUnitTest :app:assembleAppDebug -Pabi=arm64-v8a --max-workers=2 --no-daemon --stacktrace
+        run: |
+          # Only the local JVM that runs the Android UI tests changes. Build tools,
+          # Kotlin/Java compilation and APK bytecode stay on the project's JDK 17.
+          cat > "$RUNNER_TEMP/cover-tests.gradle" <<'EOF'
+          gradle.beforeProject { p ->
+              if (p.path == ':app') {
+                  p.afterEvaluate {
+                      p.tasks.withType(Test).matching { it.name == 'testAppDebugUnitTest' }.configureEach {
+                          javaLauncher.set(p.javaToolchains.launcherFor {
+                              languageVersion = JavaLanguageVersion.of(21)
+                          })
+                          testLogging { exceptionFormat = 'full' }
+                      }
+                  }
+              }
+          }
+          EOF
+          ./gradlew -I "$RUNNER_TEMP/cover-tests.gradle" -Porg.gradle.java.installations.fromEnv=JAVA_HOME_21_X64 :app:testAppDebugUnitTest :app:assembleAppDebug -Pabi=arm64-v8a --max-workers=2 --no-daemon --stacktrace
 
       - name: Verify the debug APK applicationId, signing and record its SHA-256
         id: apk
