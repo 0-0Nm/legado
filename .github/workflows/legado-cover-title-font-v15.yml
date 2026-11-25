@@ -63,12 +63,14 @@ jobs:
             exit 1
           fi
           expected_package='io.legado.app.archivecoverfont'
-          if ! "$aapt2" dump badging "${apks[0]}" | head -n 1 | grep -Eq "^package: name='${expected_package//./\\.}'( |$)"; then
+          badging="$RUNNER_TEMP/app-debug-badging.txt"
+          "$aapt2" dump badging "${apks[0]}" > "$badging"
+          head -n 1 "$badging"
+          if ! head -n 1 "$badging" | grep -Eq "^package: name='${expected_package//./\\.}'( |$)"; then
             echo '::error::AppDebug APK applicationId mismatch'
-            "$aapt2" dump badging "${apks[0]}" | head -n 1
             exit 1
           fi
-          "$aapt2" dump badging "${apks[0]}" | head -n 1
+          grep -Ex "native-code: 'arm64-v8a'[[:space:]]*" "$badging"
 
           apksigner=$(find "${ANDROID_HOME:?}/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)
           if [[ ! -x "$apksigner" ]]; then
@@ -76,7 +78,7 @@ jobs:
             exit 1
           fi
           "$apksigner" verify --print-certs "${apks[0]}" | tee "$RUNNER_TEMP/app-debug-signers.txt"
-          grep -Eq '^Signer #1 certificate DN: .*CN=Android Debug(,|$)' "$RUNNER_TEMP/app-debug-signers.txt"
+          grep -Eq '^(Signer #1 certificate DN|V2 Signer: certificate DN): (C=US, O=Android, CN=Android Debug|CN=Android Debug, O=Android, C=US)$' "$RUNNER_TEMP/app-debug-signers.txt"
           sha256sum "${apks[0]}"
           printf 'path=%s\n' "${apks[0]}" >> "$GITHUB_OUTPUT"
 
