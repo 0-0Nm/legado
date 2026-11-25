@@ -1,0 +1,60 @@
+name: Cover title font v15 CI
+
+'on':
+  push:
+    branches:
+      - 'feat/cover-title-font'
+
+permissions:
+  contents: read
+
+jobs:
+  app-debug-arm64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the pushed commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Temurin JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run AppDebug unit tests and assemble the arm64 APK
+        # Omitting RELEASE_STORE_FILE leaves AppDebug on Android's default debug signing config.
+        run: ./gradlew :app:testAppDebugUnitTest :app:assembleAppDebug -Pabi=arm64-v8a --stacktrace
+
+      - name: Verify the debug APK and record its SHA-256
+        id: apk
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/app/debug/legado_app_*.apk)
+          if (( ${#apks[@]} != 1 )) || [[ ! -s ${apks[0]} ]]; then
+            echo '::error::Expected exactly one nonempty AppDebug APK'
+            exit 1
+          fi
+
+          apksigner=$(find "${ANDROID_HOME:?}/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)
+          if [[ ! -x "$apksigner" ]]; then
+            echo '::error::Android SDK apksigner not found'
+            exit 1
+          fi
+          "$apksigner" verify --print-certs "${apks[0]}" | tee "$RUNNER_TEMP/app-debug-signers.txt"
+          grep -Eq '^Signer #1 certificate DN: .*CN=Android Debug(,|$)' "$RUNNER_TEMP/app-debug-signers.txt"
+          sha256sum "${apks[0]}"
+          printf 'path=%s\n' "${apks[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload only the verified AppDebug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: legado-cover-title-font-v15-app-debug-arm64
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error

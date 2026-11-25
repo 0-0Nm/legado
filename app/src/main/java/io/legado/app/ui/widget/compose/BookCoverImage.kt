@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -70,6 +71,11 @@ import kotlin.math.roundToInt
 private const val BOOK_COVER_ASPECT_RATIO = 0.75f
 private const val COVER_THUMB_WIDTH = 240
 private const val COVER_THUMB_HEIGHT = 320
+
+// Only bookshelf book covers provide these values. All other cover callers retain
+// the original vertical title paint; author paint and image load/cache keys are independent.
+internal data class CoverTitlePaint(val typeface: Typeface?, val color: Int?)
+internal val LocalCoverTitlePaint = compositionLocalOf<CoverTitlePaint?> { null }
 
 private var cachedDefaultDrawable: Drawable? = null
 private var cachedDefaultBitmap: Bitmap? = null
@@ -384,7 +390,8 @@ private fun BookCoverNameOverlay(
     val context = LocalContext.current
     val themeSignature = rememberThemeUiPalette().signature
     val backgroundColor = remember(context, themeSignature) { context.backgroundColor }
-    val nameColor = remember(context, themeSignature) { context.titleTextColor }
+    val titlePaint = LocalCoverTitlePaint.current
+    val nameColor = titlePaint?.color ?: remember(context, themeSignature) { context.titleTextColor }
     val authorColor = remember(context, themeSignature) { context.secondaryTextColor }
     Canvas(modifier = modifier) {
         val viewWidth = size.width
@@ -393,7 +400,7 @@ private fun BookCoverNameOverlay(
         var startX = viewWidth * 0.2f
         var startY = viewHeight * 0.2f
         val namePaint = TextPaint().apply {
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = titlePaint?.typeface ?: Typeface.DEFAULT_BOLD
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }

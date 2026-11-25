@@ -251,6 +251,22 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) {
             appCtx.putPrefInt(PreferKey.showBooknameLayout, value)
         }
+    // Overrides belong only to the vertical title on a bookshelf cover.
+    var bookshelfCoverTitleFont: String
+        get() = appCtx.getPrefString(PreferKey.bookshelfCoverTitleFont).orEmpty()
+        set(value) {
+            if (value.isEmpty()) appCtx.removePref(PreferKey.bookshelfCoverTitleFont)
+            else appCtx.putPrefString(PreferKey.bookshelfCoverTitleFont, value)
+        }
+
+    // No sentinel color: every ARGB value, including transparent black, is valid.
+    var bookshelfCoverTitleColor: Int?
+        get() = appCtx.getPrefString(PreferKey.bookshelfCoverTitleColor)?.toIntOrNull()
+        set(value) {
+            if (value == null) appCtx.removePref(PreferKey.bookshelfCoverTitleColor)
+            else appCtx.putPrefString(PreferKey.bookshelfCoverTitleColor, value.toString())
+        }
+
     var bookshelfMargin: Int
         get() = appCtx.getPrefInt(PreferKey.bookshelfMargin, 12)
         set(value) {

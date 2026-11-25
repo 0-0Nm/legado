@@ -14,6 +14,8 @@ object PreferKey {
     const val editTemeAuto = "editTemeAuto"
     const val showUnread = "showUnread"
     const val showBooknameLayout = "showBooknameLayout"
+    const val bookshelfCoverTitleFont = "bookshelfCoverTitleFont"
+    const val bookshelfCoverTitleColor = "bookshelfCoverTitleColor"
     const val bookshelfMargin = "bookshelfMargin"
     const val bookshelfListItemStyle = "bookshelfListItemStyle"
     const val bookshelfListIntroLines = "bookshelfListIntroLines"

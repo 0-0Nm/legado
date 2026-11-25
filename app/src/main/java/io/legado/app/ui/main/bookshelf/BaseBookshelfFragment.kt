@@ -30,6 +30,7 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
+import io.legado.app.ui.main.bookshelf.compose.refreshBookshelfCoverTitle
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.compose.ComposeMultiChoiceDialog
 import io.legado.app.ui.widget.compose.ComposeTextInputDialog
@@ -293,7 +294,9 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                     showBookname = showBookname,
                     listItemStyle = listItemStyle,
                     listIntroLines = listIntroLines,
-                    margin = AppConfig.bookshelfMargin
+                    margin = AppConfig.bookshelfMargin,
+                    coverTitleFont = AppConfig.bookshelfCoverTitleFont,
+                    coverTitleColor = AppConfig.bookshelfCoverTitleColor
                 ),
                 onPreviewMarginChange = ::previewBookshelfMargin,
                 onApply = { values ->
@@ -342,6 +345,17 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             AppConfig.showBookname = showBookname
             structureChanged = true
         }
+        if (AppConfig.bookshelfCoverTitleFont != values.coverTitleFont) {
+            val oldFont = AppConfig.bookshelfCoverTitleFont
+            AppConfig.bookshelfCoverTitleFont = values.coverTitleFont
+            BookshelfTitleFonts.removeOldImport(requireContext(), oldFont)
+            refreshBookshelf = true
+        }
+        if (AppConfig.bookshelfCoverTitleColor != values.coverTitleColor) {
+            AppConfig.bookshelfCoverTitleColor = values.coverTitleColor
+            refreshBookshelf = true
+        }
+        refreshBookshelfCoverTitle()
         if (AppConfig.bookshelfMargin != margin) {
             AppConfig.bookshelfMargin = margin
             refreshBookshelf = true
