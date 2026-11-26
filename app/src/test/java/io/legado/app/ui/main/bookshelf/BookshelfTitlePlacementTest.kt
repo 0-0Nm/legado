@@ -5,7 +5,7 @@ package io.legado.app.ui.main.bookshelf
 import android.app.Application
 import android.graphics.Typeface
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -80,7 +80,9 @@ class BookshelfTitlePlacementTest {
         owner.get().setTheme(R.style.AppTheme_Light)
         owner.setup()
         try {
-            owner.get().setContent {
+            val content = ComposeView(owner.get())
+            owner.get().setContentView(content)
+            content.setContent {
                 key(version.intValue) { BookshelfGridItem(item, Modifier.width(160.dp).testTag("tile"), onClick = {}, onLongClick = {}) }
             }
             val masks = mutableMapOf<Boolean, Set<Int>>()
