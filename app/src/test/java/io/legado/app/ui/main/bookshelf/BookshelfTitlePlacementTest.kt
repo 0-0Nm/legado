@@ -10,7 +10,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -47,14 +48,23 @@ class BookshelfTitlePlacementTest {
 
     // Read the upper half only: horizontal overlay is at the bottom and caption is below it.
     // This is the native Canvas fill, not a test-only property attached to the cover.
+    private lateinit var content: ComposeView
+
     private fun glyphMask(ink: Int): Set<Int> {
-        val shot = ui.onNodeWithTag("tile", useUnmergedTree = true).captureToImage().asAndroidBitmap()
-        val bitmap = if (shot.config == android.graphics.Bitmap.Config.HARDWARE) shot.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else shot
-        val w = bitmap.width / 2
-        val h = bitmap.width / 2
-        val pixels = IntArray(w * h)
-        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-        return pixels.indices.filterTo(mutableSetOf()) { pixels[it] == ink }
+        val bounds = ui.onNodeWithTag("tile", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val w = bounds.width.toInt() / 2
+        return ui.runOnIdle {
+            // Use the attached view's real draw traversal, backed by Robolectric native Skia.
+            // Window PixelCopy's hardware frame-commit callback isn't delivered in this host.
+            val bitmap = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.translate(-bounds.left, -bounds.top)
+            content.draw(canvas)
+            val pixels = IntArray(w * w)
+            bitmap.getPixels(pixels, 0, w, 0, 0, w, w)
+            bitmap.recycle()
+            pixels.indices.filterTo(mutableSetOf()) { pixels[it] == ink }
+        }
     }
 
     @Test fun actualGridTextAndCoverCanvasAcrossModesAndFollowSwitches() {
@@ -80,7 +90,7 @@ class BookshelfTitlePlacementTest {
         owner.get().setTheme(R.style.AppTheme_Light)
         owner.setup()
         try {
-            val content = ComposeView(owner.get())
+            content = ComposeView(owner.get())
             owner.get().setContentView(content)
             content.setContent {
                 key(version.intValue) { BookshelfGridItem(item, Modifier.width(160.dp).testTag("tile"), onClick = {}, onLongClick = {}) }
@@ -117,10 +127,8 @@ class BookshelfTitlePlacementTest {
                     val ink = if (color) hInk else vInk
                     val other = if (color) vInk else hInk
                     if (vertical) {
-                        // Font resolution is on IO. Wait for the actual rendered outline to settle.
-                        ui.waitUntil(5000) { glyphMask(ink).isNotEmpty() }
-                        if (font && masks.containsKey(false)) ui.waitUntil(5000) { glyphMask(ink) != masks[false] }
                         val observed = glyphMask(ink)
+                        assertTrue("No vertical fill: mode=$mode followFont=$font followColor=$color", observed.isNotEmpty())
                         val previous = masks.putIfAbsent(font, observed)
                         if (previous != null) assertEquals(previous, observed)
                         if (masks.size == 2) assertNotEquals(masks[true], masks[false])
