@@ -66,7 +66,7 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.lib.prefs.ColorPreference
-import io.legado.app.lib.theme.titleTextColor
+import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.utils.toastOnUi
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -100,8 +100,7 @@ data class BookshelfConfigValues(
     val listItemStyle: Int,
     val listIntroLines: Int,
     val margin: Int,
-    val coverTitleFont: String = "",
-    val coverTitleColor: Int? = null
+    val typography: ShelfTypography = ShelfTypography()
 )
 
 private data class BookshelfConfigOption(
@@ -189,27 +188,34 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
     private var previewMarginChanged = false
     private var applied = false
     private var values by mutableStateOf(initialValues)
-    private var pendingFont by mutableStateOf<Uri?>(null)
+    private var slot by mutableStateOf(ShelfTitleSlot.Book)
+    private var pendingFonts by mutableStateOf(emptyMap<ShelfTitleSlot, Uri>())
+    private var importSlot = ShelfTitleSlot.Book
     private var importing by mutableStateOf(false)
     private val openLocalFont = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) pendingFont = uri
+        if (uri != null) pendingFonts = pendingFonts + (importSlot to uri)
+    }
+
+    private fun editChoice(target: ShelfTitleSlot = slot, change: (ShelfTitleChoice) -> ShelfTitleChoice) {
+        values = values.copy(typography = values.typography.with(target, change(values.typography[target])))
     }
 
     override fun onColorSelected(dialogId: Int, color: Int) {
-        values = values.copy(coverTitleColor = color)
+        val target = ShelfTitleSlot.entries.getOrNull(dialogId) ?: return
+        editChoice(target) { it.copy(color = color) }
     }
 
     override fun onDialogDismissed(dialogId: Int) = Unit
 
-    internal fun restoreTitleTheme() {
-        values = values.copy(coverTitleColor = null)
-    }
+    internal fun restoreTitleColor() = editChoice { it.copy(color = null) }
 
-    internal fun pickTitleColor() {
+    internal fun pickTitleColor(target: ShelfTitleSlot = slot) {
+        if (!isAdded) return
         val manager = childFragmentManager // The attached layout dialog owns the picker.
         if (manager.isStateSaved || manager.findFragmentByTag(TITLE_COLOR_TAG) != null) return
         val picker = ColorPreference.ColorPickerDialogCompat.newBuilder()
-            .setColor(values.coverTitleColor ?: requireContext().titleTextColor)
+            .setDialogId(target.ordinal)
+            .setColor(values.typography[target].color ?: shelfDefaultInk(requireContext().backgroundColor))
             .setShowAlphaSlider(true)
             .create()
         picker.setColorPickerDialogListener(this)
@@ -226,8 +232,8 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
         if (importing || applied) return
         val commit = onApply ?: return dismissAllowingStateLoss()
         val draft = values
-        val source = pendingFont
-        if (source == null) {
+        val sources = pendingFonts
+        if (sources.isEmpty()) {
             commit(draft)
             applied = true
             dismissAllowingStateLoss()
@@ -237,11 +243,17 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
         importing = true
         isCancelable = false
         viewLifecycleOwner.lifecycleScope.launch {
-            var imported: File? = null
+            val imported = mutableListOf<File>()
             try {
-                withContext(Dispatchers.IO) { imported = BookshelfTitleFonts.importDocument(context, source) }
-                commit(draft.copy(coverTitleFont = checkNotNull(imported).absolutePath))
-                imported = null // Ownership passed to the committed preference.
+                val result = withContext(Dispatchers.IO) {
+                    sources.entries.fold(draft.typography) { styles, (target, uri) ->
+                        val file = BookshelfTitleFonts.importDocument(context, uri)
+                        imported.add(file)
+                        styles.with(target, styles[target].copy(font = file.absolutePath))
+                    }
+                }
+                commit(draft.copy(typography = result))
+                imported.clear() // The committed choices now own all of these files.
                 applied = true
                 dismissAllowingStateLoss()
             } catch (e: CancellationException) {
@@ -249,7 +261,7 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
             } catch (e: Exception) {
                 toastOnUi("导入字体失败：${e.localizedMessage.orEmpty()}")
             } finally {
-                imported?.delete()
+                imported.forEach { it.delete() }
                 importing = false
                 isCancelable = true
             }
@@ -274,10 +286,10 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
                 }
                 if (libraryOpen) {
                     BookshelfTitleFontLibrary(
-                        current = if (pendingFont == null) values.coverTitleFont else "",
+                        current = if (slot !in pendingFonts) values.typography[slot].font else "",
                         onPick = { ref ->
-                            pendingFont = null
-                            values = values.copy(coverTitleFont = ref)
+                            pendingFonts = pendingFonts - slot
+                            editChoice { it.copy(font = ref) }
                             libraryOpen = false
                         },
                         onClose = { libraryOpen = false }
@@ -293,25 +305,30 @@ class BookshelfConfigDialog : ComposeDialogFragment(), ColorPickerDialogListener
                             texts = texts,
                             style = style,
                             bookNameExtras = { closePopup ->
-                                val fontLabel = pendingFont?.let {
-                                    "待导入：" + it.lastPathSegment.orEmpty().substringAfterLast('/')
-                                } ?: BookshelfTitleFonts.label(values.coverTitleFont)
+                                val choice = values.typography[slot]
+                                val visibleSlots = listOf(ShelfTitleSlot.Book, ShelfTitleSlot.BookVertical) +
+                                    if (values.groupStyle == 1) listOf(ShelfTitleSlot.Folder, ShelfTitleSlot.FolderVertical)
+                                    else listOf(ShelfTitleSlot.GroupTag)
+                                LaunchedEffect(visibleSlots) { if (slot !in visibleSlots) slot = ShelfTitleSlot.Book }
+                                visibleSlots.chunked(2).forEach { pair ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        pair.forEach { target -> BookshelfChoiceChip(target.label, target == slot,
+                                            style, BookshelfPremiumSpec(), Modifier.weight(1f)) { slot = target } }
+                                    }
+                                }
                                 BookshelfTitleOptions(
-                                    fontLabel = fontLabel,
-                                    color = values.coverTitleColor,
+                                    slot = slot, choice = choice,
+                                    fontLabel = pendingFonts[slot]?.let {
+                                        "待导入：" + it.lastPathSegment.orEmpty().substringAfterLast('/')
+                                    } ?: BookshelfTitleFonts.label(choice.font),
                                     style = style,
+                                    onFollowFont = { editChoice { it.copy(followFont = !it.followFont) } },
+                                    onFollowColor = { editChoice { it.copy(followColor = !it.followColor) } },
                                     onLibrary = { closePopup(); libraryOpen = true },
-                                    onImport = {
-                                        closePopup()
-                                        // Providers often advertise fonts as application/octet-stream.
-                                        openLocalFont.launch(arrayOf("*/*"))
-                                    },
-                                    onDefault = {
-                                        pendingFont = null
-                                        values = values.copy(coverTitleFont = "")
-                                    },
+                                    onImport = { closePopup(); importSlot = slot; openLocalFont.launch(arrayOf("*/*")) },
+                                    onDefault = { pendingFonts = pendingFonts - slot; editChoice { it.copy(font = "") } },
                                     onColor = { closePopup(); pickTitleColor() },
-                                    onTheme = ::restoreTitleTheme
+                                    onResetColor = ::restoreTitleColor
                                 )
                             },
                             onValuesChange = { nextValues ->
@@ -869,28 +886,34 @@ private fun BookshelfChoicePopupPanel(
 
 @Composable
 private fun BookshelfTitleOptions(
-    fontLabel: String,
-    color: Int?,
-    style: AppDialogStyle,
-    onLibrary: () -> Unit,
-    onImport: () -> Unit,
-    onDefault: () -> Unit,
-    onColor: () -> Unit,
-    onTheme: () -> Unit
+    slot: ShelfTitleSlot, choice: ShelfTitleChoice, fontLabel: String, style: AppDialogStyle,
+    onFollowFont: () -> Unit, onFollowColor: () -> Unit, onLibrary: () -> Unit,
+    onImport: () -> Unit, onDefault: () -> Unit, onColor: () -> Unit, onResetColor: () -> Unit
 ) {
     val spec = BookshelfPremiumSpec()
-    Text("竖排封面书名 · $fontLabel", color = style.secondaryText, fontSize = 12.sp,
-        maxLines = 1, overflow = TextOverflow.Ellipsis)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        BookshelfChoiceChip("字体库", false, style, spec, Modifier.weight(1f), onLibrary)
-        BookshelfChoiceChip("导入 TTF/OTF", false, style, spec, Modifier.weight(1.5f), onImport)
-        BookshelfChoiceChip("恢复默认", false, style, spec, Modifier.weight(1f), onDefault)
+    val horizontal = slot.horizontal
+    if (horizontal != null) {
+        Text("竖排是否显示仍由封面设置决定。", color = style.secondaryText, fontSize = 12.sp)
+        BookshelfDisplaySwitchRow(BookshelfSwitchItem("font", "字体跟随${horizontal.label}", "",
+            choice.followFont) { onFollowFont() }, style)
     }
-    val colorLabel = color?.let { "#%08X".format(it) } ?: "跟随主题"
-    Text("书名颜色 · $colorLabel", color = style.secondaryText, fontSize = 12.sp)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        BookshelfChoiceChip("自定义颜色", color != null, style, spec, Modifier.weight(1f), onColor)
-        BookshelfChoiceChip("跟随主题", color == null, style, spec, Modifier.weight(1f), onTheme)
+    if (horizontal == null || !choice.followFont) {
+        Text("${slot.label}字体 · $fontLabel", color = style.secondaryText, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BookshelfChoiceChip("字体库", false, style, spec, Modifier.weight(1f), onLibrary)
+            BookshelfChoiceChip("导入 TTF/OTF", false, style, spec, Modifier.weight(1.5f), onImport)
+            BookshelfChoiceChip("恢复默认", false, style, spec, Modifier.weight(1f), onDefault)
+        }
+    }
+    if (horizontal != null) BookshelfDisplaySwitchRow(BookshelfSwitchItem("color",
+        "颜色跟随${horizontal.label}", "", choice.followColor) { onFollowColor() }, style)
+    if (horizontal == null || !choice.followColor) {
+        val colorLabel = choice.color?.let { "#%08X".format(it) } ?: "自动对比色"
+        Text("${slot.label}颜色 · $colorLabel", color = style.secondaryText, fontSize = 12.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BookshelfChoiceChip("自定义颜色", choice.color != null, style, spec, Modifier.weight(1f), onColor)
+            BookshelfChoiceChip("自动对比色", choice.color == null, style, spec, Modifier.weight(1f), onResetColor)
+        }
     }
 }
 

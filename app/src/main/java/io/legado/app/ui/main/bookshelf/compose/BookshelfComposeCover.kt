@@ -18,6 +18,13 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.help.config.CoverCollectionManager.isRealCoverPath
+import io.legado.app.ui.main.bookshelf.ShelfTypography
+import io.legado.app.ui.main.bookshelf.ShelfTitleSlot
+import io.legado.app.ui.main.bookshelf.ShelfTitleStore
+import io.legado.app.ui.main.bookshelf.shelfDefaultInk
+import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.utils.defaultSharedPreferences
+import splitties.init.appCtx
 import io.legado.app.ui.main.bookshelf.BookshelfTitleFonts
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.CoverTitlePaint
@@ -26,16 +33,11 @@ import io.legado.app.ui.widget.image.CoverImageView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-internal data class BookshelfTitleSettings(val mode: Int, val font: String, val color: Int?) {
-    fun belowCover(isBook: Boolean) = takeIf { isBook && mode == 0 }
-    fun onCover(eligible: Boolean) = takeIf { eligible && mode == 2 }
-}
+internal data class BookshelfTitleSettings(val mode: Int, val typography: ShelfTypography)
 
-private fun readTitleSettings() = BookshelfTitleSettings(
-    AppConfig.showBookname, AppConfig.bookshelfCoverTitleFont, AppConfig.bookshelfCoverTitleColor
-)
+private fun readTitleSettings() = BookshelfTitleSettings(AppConfig.showBookname,
+    ShelfTitleStore.read(appCtx.defaultSharedPreferences))
 
-// Both placements observe the same snapshot, published after the main dialog's Apply.
 internal var bookshelfTitleSettings by mutableStateOf(readTitleSettings())
     private set
 
@@ -43,17 +45,23 @@ internal fun refreshBookshelfCoverTitle() {
     bookshelfTitleSettings = readTitleSettings()
 }
 
+internal fun BookshelfItemUi.titleSlot(vertical: Boolean) = when (this) {
+    is BookshelfBookItemUi -> if (vertical) ShelfTitleSlot.BookVertical else ShelfTitleSlot.Book
+    is BookshelfFolderItemUi -> if (vertical) ShelfTitleSlot.FolderVertical else ShelfTitleSlot.Folder
+}
+
 @Composable
-internal fun rememberBookshelfTitlePaint(settings: BookshelfTitleSettings?): CoverTitlePaint? {
-    if (settings == null || (settings.font.isEmpty() && settings.color == null)) return null
-    val ref = settings.font
-    val context = LocalContext.current.applicationContext
-    val face = if (ref.isEmpty()) null else key(ref) {
-        produceState<Typeface?>(null, ref) {
-            value = withContext(Dispatchers.IO) { BookshelfTitleFonts.resolve(context, ref) }
+internal fun rememberBookshelfTitlePaint(slot: ShelfTitleSlot): CoverTitlePaint {
+    val choice = bookshelfTitleSettings.typography.effective(slot)
+    val context = LocalContext.current
+    val app = context.applicationContext
+    val ref = choice.font
+    val face = if (ref.isEmpty()) Typeface.DEFAULT else key(app, ref) {
+        produceState(BookshelfTitleFonts.cachedImport(ref) ?: Typeface.DEFAULT, app, ref) {
+            value = withContext(Dispatchers.IO) { BookshelfTitleFonts.resolve(app, ref) } ?: Typeface.DEFAULT
         }.value
     }
-    return CoverTitlePaint(face, settings.color)
+    return CoverTitlePaint(face, choice.color ?: shelfDefaultInk(context.backgroundColor))
 }
 
 @Composable
@@ -68,11 +76,8 @@ fun BookshelfComposeCover(
     val coverRequest = remember(item.coverIdentityKey()) {
         item.toCoverRequest()
     }
-    val settings = bookshelfTitleSettings.onCover(
-        item is BookshelfBookItemUi && style == CoverImageView.CoverStyle.GRID &&
-            coverRequest.allowNameOverlay == true
-    )
-    CompositionLocalProvider(LocalCoverTitlePaint provides rememberBookshelfTitlePaint(settings)) {
+    // Supplying paint does not grant a cover permission to draw lettering.
+    CompositionLocalProvider(LocalCoverTitlePaint provides rememberBookshelfTitlePaint(item.titleSlot(true))) {
         BookCoverImage(
             path = coverRequest.path,
             name = coverRequest.name,

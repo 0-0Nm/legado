@@ -68,20 +68,17 @@ internal object BookshelfTitleFonts {
         else Typeface.createFromFile(file)
     }.getOrNull()
 
-    // One selected face shared by all visible books (including a cached missing result).
-    private var lastRef: String? = null
-    private var lastFace: Typeface? = null
+    // Books, folders and labels can have different faces on the same screen.
+    private val importedFaces = android.util.LruCache<String, Typeface>(12)
+
+    @Synchronized
+    fun cachedImport(ref: String): Typeface? = importedFaces.get(ref)
 
     @Synchronized
     fun resolve(context: Context, ref: String): Typeface? {
-        if (lastRef == ref) return lastFace
+        if (ref.startsWith("@font:")) return runCatching { AppFont.tryTypeface(ref) }.getOrNull()
         val file = File(ref)
-        lastFace = when {
-            ref.startsWith("@font:") -> AppFont.tryTypeface(ref)
-            file.parentFile == File(context.filesDir, DIRECTORY) -> loadFile(file)
-            else -> null
-        }
-        lastRef = ref
-        return lastFace
+        if (file.parentFile != File(context.filesDir, DIRECTORY) || !file.isFile) return null
+        return importedFaces.get(ref) ?: loadFile(file)?.also { importedFaces.put(ref, it) }
     }
 }

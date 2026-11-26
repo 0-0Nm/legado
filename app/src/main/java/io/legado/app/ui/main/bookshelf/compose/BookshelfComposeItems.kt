@@ -33,9 +33,6 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.BookTagHelper
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.rememberThemeUiPalette
-import io.legado.app.lib.theme.titleTypeface
-import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.utils.toTimeAgo
 
 sealed interface BookshelfItemUi {
@@ -137,16 +134,7 @@ fun BookshelfGridItem(
     onClick: (BookshelfItemUi) -> Unit,
     onLongClick: (BookshelfItemUi) -> Unit
 ) {
-    val context = LocalContext.current
-    val themeSignature = rememberThemeUiPalette().signature
     val settings = bookshelfTitleSettings
-    val titleFontFamily = remember(context, themeSignature) {
-        FontFamily(context.titleTypeface())
-    }
-    val titleColorArgb = context.titleTextColor
-    val titleColor = remember(context, themeSignature, titleColorArgb) {
-        Color(titleColorArgb)
-    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -173,40 +161,31 @@ fun BookshelfGridItem(
                 BookshelfStatusBadge(item)
             }
             if (settings.mode == 2) {
-                Text(
-                    text = item.displayName,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 6.dp),
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontFamily = titleFontFamily,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                ShelfCaption(item, Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 6.dp), overlay = true)
             }
         }
         if (settings.mode == 0) {
-            val paint = rememberBookshelfTitlePaint(settings.belowCover(item is BookshelfBookItemUi))
-            val customFace = paint?.typeface
-            Text(
-                text = item.displayName,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                color = paint?.color?.let { Color(it) } ?: titleColor,
-                fontSize = 12.sp,
-                fontFamily = if (customFace == null) titleFontFamily else remember(customFace) { FontFamily(customFace) },
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                minLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            ShelfCaption(item, Modifier.fillMaxWidth().padding(top = 6.dp), centered = true)
         }
     }
+}
+
+/** Both horizontal placements use this exact text consumer. A contrast shadow keeps the
+ * overlay legible without changing its ink or replacing a custom color with white. */
+@Composable
+internal fun ShelfCaption(item: BookshelfItemUi, modifier: Modifier = Modifier,
+    centered: Boolean = false, overlay: Boolean = false, list: Boolean = false) {
+    val paint = rememberBookshelfTitlePaint(item.titleSlot(false))
+    Text(text = item.displayName, modifier = modifier,
+        color = Color(paint.color), fontFamily = remember(paint.typeface) { FontFamily(paint.typeface) },
+        fontWeight = FontWeight.Normal, fontSize = if (list) 16.sp else 12.sp,
+        style = androidx.compose.material3.LocalTextStyle.current.copy(shadow = if (overlay)
+            androidx.compose.ui.graphics.Shadow(Color(io.legado.app.ui.main.bookshelf.shelfDefaultInk(paint.color)),
+                blurRadius = 3f) else null),
+        textAlign = if (centered) TextAlign.Center else TextAlign.Start,
+        maxLines = if (list) 1 else 2, minLines = if (centered) 2 else 1,
+        overflow = TextOverflow.Ellipsis)
 }
 
 @Composable

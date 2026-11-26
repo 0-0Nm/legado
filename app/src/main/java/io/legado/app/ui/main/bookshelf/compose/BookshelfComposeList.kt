@@ -91,20 +91,20 @@ data class BookshelfListRenderConfig(
 )
 
 @Composable
-fun rememberBookshelfListPalette(): BookshelfListPalette {
+fun rememberBookshelfListPalette(shelf: Boolean = false): BookshelfListPalette {
     val context = LocalContext.current
     val themeUiPalette = rememberThemeUiPalette()
     val rowBaseColor = themeUiPalette.cardColor
     val rowColor = UiCorner.surfaceColor(rowBaseColor)
     val rowPressedColor = UiCorner.surfaceColor(rowBaseColor, pressed = true)
-    val primaryText = Color(context.titleTextColor)
+    val primaryText = if (shelf) Color.Unspecified else Color(context.titleTextColor)
     val secondaryText = Color(context.secondaryTextColor)
     val accent = Color(context.accentColor)
     val border = UiCorner.panelBorderColor(context)
     val panelRadiusPx = UiCorner.panelRadius(context)
     val panelRadius = context.composePanelRadius()
     val actionRadius = context.composeActionRadius()
-    val titleFontFamily = FontFamily(context.titleTypeface())
+    val titleFontFamily = if (shelf) FontFamily.Default else FontFamily(context.titleTypeface())
     val bodyFontFamily = FontFamily(context.uiTypeface())
     return remember(
         rowColor,
@@ -138,9 +138,9 @@ fun rememberBookshelfListPalette(): BookshelfListPalette {
 }
 
 @Composable
-fun rememberBookshelfListRenderConfig(): BookshelfListRenderConfig {
+fun rememberBookshelfListRenderConfig(shelf: Boolean = false): BookshelfListRenderConfig {
     val context = LocalContext.current
-    val palette = rememberBookshelfListPalette()
+    val palette = rememberBookshelfListPalette(shelf)
     val panelImage = remember(context, palette.panelRadiusPx, palette.themeSignature) {
         UiCorner.panelImageDrawable(context, palette.panelRadiusPx)
     }
@@ -299,6 +299,9 @@ private fun BookshelfCoverBlock(
             fragment = fragment,
             lifecycle = lifecycle
         )
+        if (bookshelfTitleSettings.mode == 2) {
+            ShelfCaption(item, Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(4.dp), overlay = true)
+        }
     }
 }
 
@@ -361,16 +364,10 @@ private fun BookshelfListTextContent(
     introMaxLines: Int
 ) {
     Column(modifier = modifier) {
-        Text(
-            text = item.displayName,
-            color = palette.primaryText,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = palette.titleFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(modifier = Modifier.height(if (compact) 4.dp else 6.dp))
+        if (bookshelfTitleSettings.mode == 0) {
+            ShelfCaption(item, list = true)
+            Spacer(modifier = Modifier.height(if (compact) 4.dp else 6.dp))
+        }
         when (item) {
             is BookshelfBookItemUi -> BookshelfBookMeta(
                 item = item,

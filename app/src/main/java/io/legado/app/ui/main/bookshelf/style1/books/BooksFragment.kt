@@ -396,7 +396,7 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books) {
         val bottomBarPadding = with(LocalDensity.current) {
             resources.getDimensionPixelSize(R.dimen.main_content_bottom_bar_padding).toDp()
         }
-        val renderConfig = rememberBookshelfListRenderConfig()
+        val renderConfig = rememberBookshelfListRenderConfig(shelf = true)
         LaunchedEffect(canScrollBackward) {
             composeCanScrollBackward = canScrollBackward
         }

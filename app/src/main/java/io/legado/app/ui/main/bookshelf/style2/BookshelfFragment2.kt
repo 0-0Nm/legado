@@ -269,7 +269,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         val bottomBarPadding = with(LocalDensity.current) {
             resources.getDimensionPixelSize(R.dimen.main_content_bottom_bar_padding).toDp()
         }
-        val renderConfig = rememberBookshelfListRenderConfig()
+        val renderConfig = rememberBookshelfListRenderConfig(shelf = true)
         DisposableEffect(currentGroupId) {
             onDispose {
                 composeScrollPositions[currentGroupId] = ComposeScrollPosition(

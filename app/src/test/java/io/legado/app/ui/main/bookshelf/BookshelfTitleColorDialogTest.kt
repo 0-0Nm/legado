@@ -24,7 +24,7 @@ import splitties.init.injectAsAppCtx
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class BookshelfTitleColorDialogTest {
-    @Test fun pickerAndThemeResetStayInDraftUntilLayoutApply() {
+    @Test fun pickerAndLocalResetStayInDraftUntilLayoutApply() {
         RuntimeEnvironment.getApplication().injectAsAppCtx()
         val owner = Robolectric.buildActivity(FragmentActivity::class.java)
         owner.get().setTheme(R.style.AppTheme_Light)
@@ -53,25 +53,25 @@ class BookshelfTitleColorDialogTest {
             dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
             main.idle()
             assertEquals(0, commits)
-            assertNull(saved.coverTitleColor)
+            assertNull(saved.typography[ShelfTitleSlot.Book].color)
             first.applyDraft()
             main.idle()
-            assertEquals(0x66123456, saved.coverTitleColor)
+            assertEquals(0x66123456, saved.typography[ShelfTitleSlot.Book].color)
             assertEquals(1, commits)
 
             val second = open()
             picker(second).cancel()
             main.idle()
-            second.restoreTitleTheme()
+            second.restoreTitleColor()
             second.dismissNow() // Main layout cancelled after the reset.
             assertEquals(1, commits)
-            assertEquals(0x66123456, saved.coverTitleColor)
+            assertEquals(0x66123456, saved.typography[ShelfTitleSlot.Book].color)
             val third = open()
-            third.restoreTitleTheme()
+            third.restoreTitleColor()
             third.applyDraft()
             main.idle()
             assertEquals(2, commits)
-            assertNull(saved.coverTitleColor)
+            assertNull(saved.typography[ShelfTitleSlot.Book].color)
         } finally {
             owner.pause().stop().destroy()
         }

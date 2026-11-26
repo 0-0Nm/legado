@@ -123,6 +123,16 @@ class RoundedTagBarView @JvmOverloads constructor(
         }
     }
 
+    private var labelTypeface: android.graphics.Typeface? = null
+    private var labelColor: Int? = null
+
+    fun setLabelAppearance(face: android.graphics.Typeface, color: Int) {
+        if (labelTypeface == face && labelColor == color) return
+        labelTypeface = face
+        labelColor = color
+        adapter.notifyDataSetChanged()
+    }
+
     fun setDisplayMode(mode: DisplayMode) {
         if (displayMode == mode) return
         displayMode = mode
@@ -260,13 +270,13 @@ class RoundedTagBarView @JvmOverloads constructor(
             val horizontalPadding = if (displayMode == DisplayMode.TEXT) 8.dp else resources.getDimensionPixelSize(R.dimen.bookshelf_tag_item_padding_horizontal)
             holder.textView.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
             holder.textView.setTextColor(
-                ColorStateList(
+                labelColor?.let { ColorStateList.valueOf(it) } ?: ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf()),
                     intArrayOf(selectedTextColor, normalTextColor)
                 )
             )
             holder.textView.text = item.text
-            holder.textView.typeface = holder.textView.context.uiTypeface()
+            holder.textView.typeface = labelTypeface ?: holder.textView.context.uiTypeface()
             holder.textView.alpha = item.alpha
             holder.textView.isSelected = position == selectedIndex
             holder.textView.setOnClickListener {

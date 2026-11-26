@@ -24,6 +24,11 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.search.SearchActivity
+import io.legado.app.ui.main.bookshelf.ShelfTitleSlot
+import io.legado.app.ui.main.bookshelf.BookshelfTitleFonts
+import io.legado.app.ui.main.bookshelf.compose.bookshelfTitleSettings
+import io.legado.app.ui.main.bookshelf.shelfDefaultInk
+import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
 import io.legado.app.ui.widget.MainTopBarView
@@ -154,6 +159,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     override fun onResume() {
         super.onResume()
+        applyGroupLabelStyle()
         binding.viewPagerBookshelf.swipeEnabled = AppConfig.bottomBarLayoutMode != "sidebar"
         binding.root.post {
             updateTopBarOverlay()
@@ -251,6 +257,20 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private fun updateHeaderTitle() {
         binding.topBar.setTitle(selectedGroup?.groupName ?: getString(R.string.bookshelf))
         renderGroupSelector()
+    }
+
+    private var labelLoad: kotlinx.coroutines.Job? = null
+    private fun applyGroupLabelStyle() {
+        labelLoad?.cancel()
+        val bar = binding.topBar.primaryBar
+        val context = bar.context
+        val choice = bookshelfTitleSettings.typography[ShelfTitleSlot.GroupTag]
+        val color = choice.color ?: shelfDefaultInk(context.backgroundColor)
+        bar.setLabelAppearance(android.graphics.Typeface.DEFAULT, color)
+        if (choice.font.isNotEmpty()) labelLoad = viewLifecycleOwner.lifecycleScope.launch {
+            val face = kotlinx.coroutines.withContext(IO) { BookshelfTitleFonts.resolve(context.applicationContext, choice.font) }
+            bar.setLabelAppearance(face ?: android.graphics.Typeface.DEFAULT, color)
+        }
     }
 
     private fun renderGroupSelector() {
@@ -379,9 +399,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     override fun observeLiveBus() {
         super.observeLiveBus()
         observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
+            applyGroupLabelStyle()
             renderBookTags(groupShelfCache[groupId].orEmpty())
         }
         observeEvent<String>(EventBus.BOOKSHELF_STRUCTURE_CHANGED) {
+            applyGroupLabelStyle()
             rebuildBookshelfContent()
         }
     }

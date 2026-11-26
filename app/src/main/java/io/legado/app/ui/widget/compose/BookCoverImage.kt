@@ -72,9 +72,9 @@ private const val BOOK_COVER_ASPECT_RATIO = 0.75f
 private const val COVER_THUMB_WIDTH = 240
 private const val COVER_THUMB_HEIGHT = 320
 
-// Only bookshelf book covers provide these values. All other cover callers retain
+// Only bookshelf covers provide these values. All other cover callers retain
 // the original vertical title paint; author paint and image load/cache keys are independent.
-internal data class CoverTitlePaint(val typeface: Typeface?, val color: Int?)
+internal data class CoverTitlePaint(val typeface: Typeface, val color: Int)
 internal val LocalCoverTitlePaint = compositionLocalOf<CoverTitlePaint?> { null }
 
 private var cachedDefaultDrawable: Drawable? = null

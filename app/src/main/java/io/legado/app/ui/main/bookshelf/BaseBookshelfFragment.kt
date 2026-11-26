@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.bookshelf
 
+import io.legado.app.utils.defaultSharedPreferences
 import android.annotation.SuppressLint
 import android.view.Menu
 import android.view.MenuItem
@@ -295,8 +296,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                     listItemStyle = listItemStyle,
                     listIntroLines = listIntroLines,
                     margin = AppConfig.bookshelfMargin,
-                    coverTitleFont = AppConfig.bookshelfCoverTitleFont,
-                    coverTitleColor = AppConfig.bookshelfCoverTitleColor
+                    typography = ShelfTitleStore.read(requireContext().defaultSharedPreferences)
                 ),
                 onPreviewMarginChange = ::previewBookshelfMargin,
                 onApply = { values ->
@@ -345,14 +345,13 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             AppConfig.showBookname = showBookname
             structureChanged = true
         }
-        if (AppConfig.bookshelfCoverTitleFont != values.coverTitleFont) {
-            val oldFont = AppConfig.bookshelfCoverTitleFont
-            AppConfig.bookshelfCoverTitleFont = values.coverTitleFont
-            BookshelfTitleFonts.removeOldImport(requireContext(), oldFont)
-            refreshBookshelf = true
-        }
-        if (AppConfig.bookshelfCoverTitleColor != values.coverTitleColor) {
-            AppConfig.bookshelfCoverTitleColor = values.coverTitleColor
+        val prefs = requireContext().defaultSharedPreferences
+        val previous = ShelfTitleStore.read(prefs)
+        if (previous != values.typography) {
+            ShelfTitleStore.write(prefs, values.typography)
+            (previous.fontRefs() - values.typography.fontRefs()).forEach {
+                BookshelfTitleFonts.removeOldImport(requireContext(), it)
+            }
             refreshBookshelf = true
         }
         refreshBookshelfCoverTitle()
