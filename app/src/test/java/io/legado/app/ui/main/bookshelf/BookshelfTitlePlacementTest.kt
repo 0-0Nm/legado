@@ -71,9 +71,12 @@ class BookshelfTitlePlacementTest {
         val app = RuntimeEnvironment.getApplication()
         app.injectAsAppCtx()
         val prefs = app.defaultSharedPreferences
-        val file = File(app.filesDir, "bookshelf-cover-fonts/test_number.ttf").apply {
+        // Existing OFL test input in the repository, not another bundled application font.
+        val fixturePath = "tools/reader-templates/astral/assets/Cinzel.ttf"
+        val fixture = sequenceOf(File(fixturePath), File("../$fixturePath")).first { it.isFile }
+        val file = File(app.filesDir, "bookshelf-cover-fonts/test_cinzel.ttf").apply {
             parentFile!!.mkdirs()
-            app.assets.open("font/number.ttf").use { input -> outputStream().use { input.copyTo(it) } }
+            fixture.inputStream().use { input -> outputStream().use { input.copyTo(it) } }
         }
         assertNotNull(BookshelfTitleFonts.resolve(app, file.path))
         val hInk = 0xff14ba59.toInt()
@@ -95,7 +98,7 @@ class BookshelfTitlePlacementTest {
             content.setContent {
                 key(version.intValue) { BookshelfGridItem(item, Modifier.width(160.dp).testTag("tile"), onClick = {}, onLongClick = {}) }
             }
-            val masks = mutableMapOf<Boolean, Set<Int>>()
+            val masks = mutableMapOf<Pair<Boolean, Int>, Set<Int>>()
             for (mode in 0..2) for (vertical in listOf(false, true)) {
                 for (font in listOf(false, true)) for (color in listOf(false, true)) {
                     ui.runOnIdle {
@@ -129,9 +132,13 @@ class BookshelfTitlePlacementTest {
                     if (vertical) {
                         val observed = glyphMask(ink)
                         assertTrue("No vertical fill: mode=$mode followFont=$font followColor=$color", observed.isNotEmpty())
-                        val previous = masks.putIfAbsent(font, observed)
+                        // Antialias coverage rounded to the exact fill color can differ by a few
+                        // boundary pixels for different inks. Compare outlines at identical ink.
+                        val previous = masks.putIfAbsent(font to ink, observed)
                         if (previous != null) assertEquals(previous, observed)
-                        if (masks.size == 2) assertNotEquals(masks[true], masks[false])
+                        masks[!font to ink]?.let { otherFace ->
+                            assertNotEquals("the two faces must draw distinct glyphs at the same ink", otherFace, observed)
+                        }
                     } else assertTrue(glyphMask(ink).isEmpty())
                     assertTrue(glyphMask(other).isEmpty())
                 }
